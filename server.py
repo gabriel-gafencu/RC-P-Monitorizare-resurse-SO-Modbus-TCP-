@@ -1,0 +1,19 @@
+import socket
+import struct
+
+HOST = '192.168.56.1'
+PORT = 2407
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((HOST, PORT))
+    s.listen()
+    conn, addr = s.accept()
+    with conn:
+        print('Connected by', addr)
+        while True:
+            data = conn.recv(1024)
+            if not data:
+                break
+            data_unpacked = struct.unpack('12B', data)
+            for i in range(len(data_unpacked)):
+                print(data_unpacked[i])
