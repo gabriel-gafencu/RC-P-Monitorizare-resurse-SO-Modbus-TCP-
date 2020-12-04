@@ -15,5 +15,4 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if not data:
                 break
             data_unpacked = struct.unpack('12B', data)
-            for i in range(len(data_unpacked)):
-                print(data_unpacked[i])
+            conn.sendall(data)
