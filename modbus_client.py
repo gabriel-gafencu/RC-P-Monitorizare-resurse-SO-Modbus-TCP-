@@ -2,7 +2,7 @@ import struct
 import socket
 
 # list of defaults for initializing the modbus client.
-DEFAULT_IP = '192.168.100.10'
+DEFAULT_IP = '127.0.0.1'
 DEFAULT_PORT = 502
 DEFAULT_ID = 0x00  # or 0xFF standard for Modbus TCP/IP
 
@@ -33,7 +33,7 @@ class Modbus_Client:
         self.tcp_port = port
         self.unit_id = id
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
+        # self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
         self.established_connection = False
 
     def initialize_connection(self):
@@ -129,23 +129,37 @@ class Modbus_Client:
         pass
 
     def request_cpu(self):
-        # cpu % usage is mapped to input registers 1 and 2 (whole and fractionary, will have to calculate it together)
+        # cpu % usage is mapped to input registers 1 and 2 (whole and fractionary, will have to sum it together)
         # self.tcp_socket.connect((self.tcp_ip, self.tcp_port))
         self.read_input_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
         unpacked_data = struct.unpack('13B', initial_data)
-        cpu_percentage_whole = unpacked_data[8] * 256 + unpacked_data[9]
-        cpu_percentage_frac = unpacked_data[10] * 256 + unpacked_data[11]
+        cpu_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
+        cpu_percentage_frac = unpacked_data[11] * 256 + unpacked_data[12]
         return cpu_percentage_whole + (cpu_percentage_frac / 100)
 
     def request_memory(self):
-        pass
+        # memory is mapped to holding registers 1 and 2 (whole and fractionary)
+        self.read_holding_registers(0x00, 0x01, 0x00, 0x02)
+        initial_data = self.tcp_socket.recv(1024)
+        unpacked_data = struct.unpack('13B', initial_data)
+        memory_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
+        memory_percentage_frac = unpacked_data[11] * 256 + unpacked_data[12]
+        return memory_percentage_whole + (memory_percentage_frac / 100)
 
     def request_disk(self):
-        pass
+        # disk percent occupied is mapped to holding registers 11 and 12 (whole and fractionary)
+        self.read_holding_registers(0x00, 0x0B, 0x00, 0x0C)
+        initial_data = self.tcp_socket.recv(1024)
+        unpacked_data = struct.unpack('13B', initial_data)
+        disk_usage_whole = unpacked_data[9] * 256 + unpacked_data[10]
+        disk_usage_frac = unpacked_data[11] * 256 + unpacked_data[12]
+        return disk_usage_whole + (disk_usage_frac / 100)
 
 
 if __name__ == '__main__':
     client = Modbus_Client()
     client.initialize_connection()
-    print(client.request_cpu())
+    print("CPU: ", client.request_cpu())
+    print("Memory: ", client.request_memory())
+    print("Disk: ", client.request_disk())
