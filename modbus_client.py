@@ -6,7 +6,7 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import QApplication, QDialog
 from PyQt5.QtGui import QPainter,QPen
 from PyQt5.QtChart import *
-from masterui import MainMaster, Ui_Master
+from masterui import Ui_Master
 
 DEFAULT_IP = '127.0.0.1'
 DEFAULT_PORT = 502
