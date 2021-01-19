@@ -2,6 +2,11 @@ import struct
 import socket
 
 # list of defaults for initializing the modbus client.
+from PyQt5 import QtGui
+from PyQt5.QtWidgets import QApplication, QDialog
+from PyQt5.QtChart import *
+from masterui import Ui_Master
+
 DEFAULT_IP = '127.0.0.1'
 DEFAULT_PORT = 502
 DEFAULT_ID = 0x00  # or 0xFF standard for Modbus TCP/IP
@@ -10,7 +15,7 @@ DEFAULT_ID = 0x00  # or 0xFF standard for Modbus TCP/IP
 # Modbus TCP/IP ADU is encoded in Big-Endian,
 # hence why the order of the bytes in the sent packets will always be H first -> L second.
 
-class Modbus_Client:
+class Modbus_M(QDialog):
     # transaction identifier (2B), protocol identifier (2B) are both set to 0 (only 1 single client-server connection)
     # length of the ADU + (unit identifier) is always going to be 6 bytes
     transaction_id_h = 0x00
@@ -21,20 +26,33 @@ class Modbus_Client:
     length_l = 0x06
 
     read_coils_function_code = 1
+    read_discrete_inputs_function_code = 1
     read_holding_registers_function_code = 3
     read_input_registers_function_code = 4
     write_single_coil_function_code = 5
     write_single_register_function_code = 6
     write_multiple_coils_function_code = 15
     write_multiple_registers_function_code = 16
+    msglist=[]
 
     def __init__(self, id=DEFAULT_ID, ip=DEFAULT_IP, port=DEFAULT_PORT):
+        self.established_connection = False
+        super(Modbus_M, self).__init__()
+        self.ui = Ui_Master()
+        self.ui.setupUi(self)
+        self.show()
+
+
         self.tcp_ip = ip
         self.tcp_port = port
         self.unit_id = id
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
-        self.established_connection = False
+        self.ui.login.clicked.connect(self.initialize_connection)
+
+        self.ui.cpu_btn.clicked.connect(self.draw_cpu)
+        self.ui.disk_btn.clicked.connect(self.draw_disk)
+        self.ui.memory_btn.clicked.connect(self.draw_memory)
 
     def initialize_connection(self):
         # need to authorize access to slave by sending something like write ON
@@ -61,8 +79,58 @@ class Modbus_Client:
         if sent_packet != returned_packet:
             print(sent_packet, " != ", returned_packet)
         self.established_connection = True
-        print("Connection established: ", self.established_connection)
+        self.conn()
 
+    def conn(self):
+        if self.established_connection:
+            self.write_status("Connection established: " + str(self.established_connection))
+            self.ui.status.showMessage(self.msglist[-1])
+            self.ui.led.value=True
+            self.ui.login.setDisabled(True)
+
+    def draw_cpu(self):
+        reqcpu = self.request_cpu()
+        self.ui.status.showMessage("cpu "+str(reqcpu)+"%")
+
+        series = QPieSeries()
+        series.append("Ocupat ", reqcpu)
+        series.append("Liber",100-reqcpu)
+        chart = QChart()
+        chart.addSeries(series)
+        chart.setTitle("CPU usage")
+        self.ui.graphicsView.setChart(chart)
+        self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
+
+    def draw_disk(self):
+        req = self.request_disk()
+        self.ui.status.showMessage("disk "+str(req)+"%")
+
+        series = QPieSeries()
+        series.append("Ocupat ", req)
+        series.append("Liber",100-req)
+        chart = QChart()
+        chart.addSeries(series)
+        chart.setTitle("Disk usage")
+        self.ui.graphicsView.setChart(chart)
+        self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
+
+    def draw_memory(self):
+        req = self.request_memory()
+        self.ui.status.showMessage("memory "+str(req)+"%")
+
+        series = QPieSeries()
+        series.append("Ocupat ", req)
+        series.append("Liber",100-req)
+        chart = QChart()
+        chart.addSeries(series)
+        chart.setTitle("Memory usage")
+        self.ui.graphicsView.setChart(chart)
+        self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
+
+    def write_status(self,message):
+        self.msglist.append(message)
+
+    # cereri
     def read_coils(self, addr_h, addr_l, no_of_coils_h, no_of_coils_l):
         # function code 1
         packet = struct.pack('12B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
@@ -71,10 +139,14 @@ class Modbus_Client:
                              addr_l, no_of_coils_h, no_of_coils_l)
         self.tcp_socket.sendall(packet)
 
-    def read_discrete_inputs(self):
-        # TODO
+    def read_discrete_inputs(self, addr_h, addr_l, no_of_dinputs_h, no_of_dinputs_l):
+
         # function code 2
-        pass
+        packet = struct.pack('12B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
+                             self.protocol_id_l, self.length_h, self.length_l, self.unit_id,
+                             int(self.read_discrete_inputs_function_code), addr_h,
+                             addr_l, no_of_dinputs_h, no_of_dinputs_l)
+        self.tcp_socket.sendall(packet)
 
     def read_holding_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l):
         # function code 3
@@ -117,16 +189,20 @@ class Modbus_Client:
         # function code 15
         # write multiple coils has a different length compared to the previous operations,
         # requiring 8 bytes after its own field
-        packet = struct.pack('12B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
+        packet = struct.pack('14B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
                              self.protocol_id_l, 0x00, 0x08, self.unit_id,
                              int(self.write_multiple_coils_function_code), addr_h, addr_l, no_of_coils_h, no_of_coils_l,
                              byte_count, force_data_h)
         self.tcp_socket.sendall(packet)
 
-    def write_multiple_registers(self):
+    def write_multiple_registers(self,addr_h, addr_l, no_of_reg_h, no_of_reg_l, byte_count, force_data_h):
         # TODO
         # function code 16
-        pass
+        packet = struct.pack('14B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
+                             self.protocol_id_l, 0x00, 0x08, self.unit_id,
+                             int(self.write_multiple_registers_function_code), addr_h, addr_l, no_of_reg_h, no_of_reg_l,
+                             byte_count, force_data_h)
+        self.tcp_socket.sendall(packet)
 
     def request_cpu(self):
         # cpu % usage is mapped to input registers 1 and 2 (whole and fractionary, will have to sum it together)
@@ -158,8 +234,8 @@ class Modbus_Client:
 
 
 if __name__ == '__main__':
-    client = Modbus_Client()
-    client.initialize_connection()
-    print("CPU: ", client.request_cpu())
-    print("Memory: ", client.request_memory())
-    print("Disk: ", client.request_disk())
+    import sys
+    app = QApplication(sys.argv)
+    client= Modbus_M()
+    sys.exit(app.exec_())
+
