@@ -1,11 +1,10 @@
-
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtChart import QPieSeries, QChart, QChartView
 from PyQt5.QtWidgets import QDialog
 from QLed import QLed
 
+stylestatus = "QStatusBar{padding-left:8px;background:rgba(255,255,255,0.9);color:black;font-weight:bold;}"
 
-stylestatus="QStatusBar{padding-left:8px;background:rgba(255,255,255,0.9);color:black;font-weight:bold;}"
 
 class Ui_Master(object):
     def setupUi(self, Master):
@@ -51,11 +50,10 @@ class Ui_Master(object):
         self.status.setStyleSheet(stylestatus)
         self.status.showMessage("hello ")
         self.led = QLed(Master, onColour=QLed.Green, shape=QLed.Circle)
-        self.led.setFixedSize(30,30)
-        self.led.value=False
+        self.led.setFixedSize(30, 30)
+        self.led.value = False
         self.gridLayout.addWidget(self.led, 4, 0, 1, 1)
         self.gridLayout_2.addWidget(self.status, 3, 1, 1, 1)
-
 
         self.retranslateUi(Master)
         QtCore.QMetaObject.connectSlotsByName(Master)
@@ -70,9 +68,8 @@ class Ui_Master(object):
         self.login.setText(_translate("Master", "Login"))
         self.label_s.setText(_translate("Master", "Status:"))
 
-
-
-class  MainMaster(QDialog):
+# doar pentru verificarea interfetei
+'''class  MainMaster(QDialog):
     def __init__(self):
         super(MainMaster,self).__init__()
         ui = Ui_Master()
@@ -84,4 +81,4 @@ if __name__ == "__main__":
     import sys
     app = QtWidgets.QApplication(sys.argv)
     mm=MainMaster()
-    sys.exit(app.exec_())
+    sys.exit(app.exec_())'''
