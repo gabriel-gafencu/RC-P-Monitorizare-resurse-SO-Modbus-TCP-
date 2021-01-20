@@ -33,8 +33,8 @@ class Modbus_M(QDialog):
     write_single_register_function_code = 6
     write_multiple_coils_function_code = 15
     write_multiple_registers_function_code = 16
-    msglist=[]
-    curr_err=0
+    msglist = []
+    curr_err = 0
 
     def __init__(self, id=DEFAULT_ID, ip=DEFAULT_IP, port=DEFAULT_PORT):
         self.established_connection = False
@@ -42,7 +42,6 @@ class Modbus_M(QDialog):
         self.ui = Ui_Master()
         self.ui.setupUi(self)
         self.show()
-
 
         self.tcp_ip = ip
         self.tcp_port = port
@@ -87,20 +86,19 @@ class Modbus_M(QDialog):
         if self.established_connection:
             self.write_status("Connection established: " + str(self.established_connection))
             self.ui.status.showMessage(self.msglist[-1])
-            self.ui.led.value=True
+            self.ui.led.value = True
             self.ui.login.setDisabled(True)
 
     def draw_cpu(self):
-
         reqcpu = self.request_cpu()
-        if reqcpu==-1:
+        if reqcpu == -1:
             self.ui.status.showMessage("eroare function ")
         else:
-            self.ui.status.showMessage("cpu "+str(reqcpu)+"%")
+            self.ui.status.showMessage("cpu " + str(reqcpu) + "%")
 
             series = QPieSeries()
             series.append("Ocupat ", reqcpu)
-            series.append("Liber",100-reqcpu)
+            series.append("Liber", 100 - reqcpu)
             chart = QChart()
             chart.addSeries(series)
             chart.setTitle("CPU usage")
@@ -109,11 +107,11 @@ class Modbus_M(QDialog):
 
     def draw_disk(self):
         req = self.request_disk()
-        self.ui.status.showMessage("disk "+str(req)+"%")
+        self.ui.status.showMessage("disk " + str(req) + "%")
 
         series = QPieSeries()
         series.append("Ocupat ", req)
-        series.append("Liber",100-req)
+        series.append("Liber", 100 - req)
         chart = QChart()
         chart.addSeries(series)
         chart.setTitle("Disk usage")
@@ -122,18 +120,18 @@ class Modbus_M(QDialog):
 
     def draw_memory(self):
         req = self.request_memory()
-        self.ui.status.showMessage("memory "+str(req)+"%")
+        self.ui.status.showMessage("memory " + str(req) + "%")
 
         series = QPieSeries()
         series.append("Ocupat ", req)
-        series.append("Liber",100-req)
+        series.append("Liber", 100 - req)
         chart = QChart()
         chart.addSeries(series)
         chart.setTitle("Memory usage")
         self.ui.graphicsView.setChart(chart)
         self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
 
-    def write_status(self,message):
+    def write_status(self, message):
         self.msglist.append(message)
 
     # cereri
@@ -201,7 +199,7 @@ class Modbus_M(QDialog):
                              byte_count, force_data_h)
         self.tcp_socket.sendall(packet)
 
-    def write_multiple_registers(self,addr_h, addr_l, no_of_reg_h, no_of_reg_l, byte_count, force_data_h):
+    def write_multiple_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l, byte_count, force_data_h):
         # TODO
         # function code 16
         packet = struct.pack('14B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
@@ -216,7 +214,7 @@ class Modbus_M(QDialog):
         self.read_input_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
         unpacked_data = struct.unpack('13B', initial_data)
-        if unpacked_data[7]>128:
+        if unpacked_data[7] > 128:
             return -1
         else:
             cpu_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
@@ -244,7 +242,7 @@ class Modbus_M(QDialog):
 
 if __name__ == '__main__':
     import sys
-    app = QApplication(sys.argv)
-    client= Modbus_M()
-    sys.exit(app.exec_())
 
+    app = QApplication(sys.argv)
+    client = Modbus_M()
+    sys.exit(app.exec_())

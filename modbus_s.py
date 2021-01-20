@@ -3,6 +3,9 @@ import socket
 import threading
 import psutil
 import math
+import logging
+from datetime import date
+from datetime import datetime
 
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import *
@@ -40,6 +43,10 @@ class Modbus_S(QDialog):
         self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
         self.awaiting_pin = True
         self.established_connection = False
+
+        logging.basicConfig(filename="log_" + str(date.today()) + ".log", level=logging.INFO)
+
+        self.ui.save_btn.clicked.connect(self.log_list)
         x = threading.Thread(target=self.run)
         x.start()
 
@@ -73,9 +80,14 @@ class Modbus_S(QDialog):
 
     def afterconn(self):
         if self.established_connection:
-            self.write_status("Connection established: " + str(self.established_connection))
+            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                              ")Connection established: " + str(self.established_connection))
             self.ui.statusbar.showMessage(self.msglist[-1])
             self.ui.led.value = True
+
+    def log_list(self):
+        for msg in self.msglist:
+            logging.info(msg)
 
     def set_tables(self):
         idx = ind = 0
@@ -126,21 +138,19 @@ class Modbus_S(QDialog):
 
     def update_info(self):
         # mapping the whole and the fractionary part of the cpu percent to the 1st and 2nd input registers
-        fr, whole = math.modf(psutil.cpu_percent(interval=0.1))
+        frac, whole = math.modf(psutil.cpu_percent(interval=0.1))
         self.input_registers[1] = whole
-        self.input_registers[2] = int(fr) * 100
-        print(str(self.input_registers[1]) + " " + str(self.input_registers[2]))
-        print(fr)
+        self.input_registers[2] = int(frac * 100)
 
         # mapping the whole and fractionary part of the memory usage (in %) to the 1st and 2nd holding registers
         frac, whole = math.modf(psutil.virtual_memory()[2])
         self.holding_registers[1] = whole
-        self.holding_registers[2] = int(frac) * 100
+        self.holding_registers[2] = int(frac * 100)
 
         # mapping the whole and fractionary part of disk usage (in %) to the 11th and 12th holding registers
         frac, whole = math.modf(psutil.disk_usage('/')[3])
         self.holding_registers[11] = whole
-        self.holding_registers[12] = int(frac) * 100
+        self.holding_registers[12] = int(frac * 100)
 
         self.set_tables()
 
@@ -151,7 +161,7 @@ class Modbus_S(QDialog):
             return None
         else:
             packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                 (fc + 128), 0x01,0x00,0x00,0x00,0x00)
+                                 (fc + 128), 0x01, 0x00, 0x00, 0x00, 0x00)
             return packet
 
     def except_illegal_data_address(self, pack):
@@ -163,7 +173,7 @@ class Modbus_S(QDialog):
                 return None
             else:
                 packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                     (fc + 128), 0x02,0x00,0x00,0x00,0x00)
+                                     (fc + 128), 0x02, 0x00, 0x00, 0x00, 0x00)
                 return packet
         if fc in [5, 6]:
             start = pack[8] * 256 + pack[9]
@@ -171,7 +181,7 @@ class Modbus_S(QDialog):
                 return None
             else:
                 packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                     (fc + 128), 0x02,0x00,0x00,0x00,0x00)
+                                     (fc + 128), 0x02, 0x00, 0x00, 0x00, 0x00)
                 return packet
 
     def except_illegal_data_value(self, pack):
@@ -181,8 +191,8 @@ class Modbus_S(QDialog):
             if 1 <= number <= 255:
                 return None
             else:
-                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                     hex(fc + 128), 0x03)
+                packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
+                                     (fc + 128), 0x03, 0x00, 0x00, 0x00, 0x00)
                 return packet
 
     def except_slave_device_failure(self, pack):
@@ -190,8 +200,8 @@ class Modbus_S(QDialog):
         if not self.slave_failure:
             return None
         else:
-            packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
-                                 hex(fc + 128), 0x04)
+            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                 (fc + 128), 0x04, 0x00, 0x00, 0x00, 0x00)
             return packet
 
     def except_slave_device_busy(self, pack):
@@ -199,8 +209,8 @@ class Modbus_S(QDialog):
         if not self.slave_busy:
             return None
         else:
-            packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
-                                 hex(fc + 128), 0x06)
+            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                 (fc + 128), 0x06, 0x00, 0x00, 0x00, 0x00)
             return packet
 
     def pack_verify(self, pack):
@@ -226,7 +236,8 @@ class Modbus_S(QDialog):
         self.tcp_socket.listen()
         self.conn, self.addr = self.tcp_socket.accept()
         with self.conn:
-            self.write_status("Connected by" + str(self.addr))
+            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                              ")Connected by" + str(self.addr))
             self.ui.statusbar.showMessage(self.msglist[-1])
             self.initialize_connection(self.conn)
             while True:
@@ -234,6 +245,8 @@ class Modbus_S(QDialog):
                 initial_data = self.conn.recv(1024)
                 unpacked_data = struct.unpack('12B', initial_data)
                 exception = self.pack_verify(unpacked_data)
+                self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                  ")Received " + str(unpacked_data))
                 if exception is None:
                     function_code = unpacked_data[7]
                     if function_code == 3:
@@ -249,6 +262,8 @@ class Modbus_S(QDialog):
                                              int(self.holding_registers[starting_register + no_of_registers - 1]))
 
                         self.conn.sendall(packet)
+                        self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                          ")Sent " + str(struct.unpack('13B', packet)))
                     elif function_code == 4:
                         # reading input registers, need to echo back
                         starting_register = unpacked_data[8] * 256 + unpacked_data[9]
@@ -262,11 +277,17 @@ class Modbus_S(QDialog):
                                              int(self.input_registers[starting_register + no_of_registers - 1]))
 
                         self.conn.sendall(packet)
+                        self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                          ")Sent " + str(struct.unpack('13B', packet)))
                     elif function_code == 5:
-                        self.conn.sendall(unpacked_data)
+                        self.conn.sendall(initial_data)
+                        self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                          ")Sent " + str(struct.unpack('13B', packet)))
 
                 else:
-                  self.conn.sendall(exception)
+                    self.conn.sendall(exception)
+                    self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                      ")Exception " + str(struct.unpack('13B', packet)))
 
 
 if __name__ == '__main__':
