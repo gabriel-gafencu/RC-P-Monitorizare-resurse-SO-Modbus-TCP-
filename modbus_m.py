@@ -34,6 +34,7 @@ class Modbus_M(QDialog):
     write_multiple_coils_function_code = 15
     write_multiple_registers_function_code = 16
     msglist=[]
+    curr_err=0
 
     def __init__(self, id=DEFAULT_ID, ip=DEFAULT_IP, port=DEFAULT_PORT):
         self.established_connection = False
@@ -51,6 +52,7 @@ class Modbus_M(QDialog):
         self.ui.login.clicked.connect(self.initialize_connection)
 
         self.ui.cpu_btn.clicked.connect(self.draw_cpu)
+
         self.ui.disk_btn.clicked.connect(self.draw_disk)
         self.ui.memory_btn.clicked.connect(self.draw_memory)
 
@@ -89,17 +91,21 @@ class Modbus_M(QDialog):
             self.ui.login.setDisabled(True)
 
     def draw_cpu(self):
-        reqcpu = self.request_cpu()
-        self.ui.status.showMessage("cpu "+str(reqcpu)+"%")
 
-        series = QPieSeries()
-        series.append("Ocupat ", reqcpu)
-        series.append("Liber",100-reqcpu)
-        chart = QChart()
-        chart.addSeries(series)
-        chart.setTitle("CPU usage")
-        self.ui.graphicsView.setChart(chart)
-        self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
+        reqcpu = self.request_cpu()
+        if reqcpu==-1:
+            self.ui.status.showMessage("eroare function ")
+        else:
+            self.ui.status.showMessage("cpu "+str(reqcpu)+"%")
+
+            series = QPieSeries()
+            series.append("Ocupat ", reqcpu)
+            series.append("Liber",100-reqcpu)
+            chart = QChart()
+            chart.addSeries(series)
+            chart.setTitle("CPU usage")
+            self.ui.graphicsView.setChart(chart)
+            self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
 
     def draw_disk(self):
         req = self.request_disk()
@@ -159,7 +165,7 @@ class Modbus_M(QDialog):
         # function code 4
         packet = struct.pack('12B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
                              self.protocol_id_l, self.length_h, self.length_l, self.unit_id,
-                             int(self.read_input_registers_function_code), addr_h, addr_l, no_of_reg_h, no_of_reg_l)
+                             0x23, addr_h, addr_l, no_of_reg_h, no_of_reg_l)
         self.tcp_socket.sendall(packet)
 
     def write_single_coil(self, state=True, addr_h=0x00, addr_l=0x01):
@@ -210,9 +216,12 @@ class Modbus_M(QDialog):
         self.read_input_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
         unpacked_data = struct.unpack('13B', initial_data)
-        cpu_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
-        cpu_percentage_frac = unpacked_data[11] * 256 + unpacked_data[12]
-        return cpu_percentage_whole + (cpu_percentage_frac / 100)
+        if unpacked_data[7]>128:
+            return -1
+        else:
+            cpu_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
+            cpu_percentage_frac = unpacked_data[11] * 256 + unpacked_data[12]
+            return cpu_percentage_whole + (cpu_percentage_frac / 100)
 
     def request_memory(self):
         # memory is mapped to holding registers 1 and 2 (whole and fractionary)
