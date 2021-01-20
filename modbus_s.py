@@ -100,13 +100,13 @@ class Modbus_S(QDialog):
                 ind += 1
 
         idx = ind = 0
-        self.ui.tableWidget.setRowCount(30)
+        self.ui.tinreg_2.setRowCount(30)
         for row in self.input_registers:
             if row == 0:
                 ind += 1
             else:
-                self.ui.tableWidget.setItem(idx, 0, QtWidgets.QTableWidgetItem(str(ind + 30000)))
-                self.ui.tableWidget.setItem(idx, 1, QtWidgets.QTableWidgetItem(str(row)))
+                self.ui.tinreg_2.setItem(idx, 0, QtWidgets.QTableWidgetItem(str(ind + 30000)))
+                self.ui.tinreg_2.setItem(idx, 1, QtWidgets.QTableWidgetItem(str(row)))
                 idx += 1
                 ind += 1
         idx = ind = 0
@@ -126,10 +126,11 @@ class Modbus_S(QDialog):
 
     def update_info(self):
         # mapping the whole and the fractionary part of the cpu percent to the 1st and 2nd input registers
-        frac, whole = math.modf(psutil.cpu_percent(interval=0.1))
+        fr, whole = math.modf(psutil.cpu_percent(interval=0.1))
         self.input_registers[1] = whole
-        self.input_registers[2] = int(frac) * 100
-        # print(str(self.input_registers[1]) + " " + str(self.input_registers[2]))
+        self.input_registers[2] = int(fr) * 100
+        print(str(self.input_registers[1]) + " " + str(self.input_registers[2]))
+        print(fr)
 
         # mapping the whole and fractionary part of the memory usage (in %) to the 1st and 2nd holding registers
         frac, whole = math.modf(psutil.virtual_memory()[2])
@@ -149,8 +150,8 @@ class Modbus_S(QDialog):
         if fc in [1, 2, 3, 4, 5, 6, 15, 16]:
             return None
         else:
-            packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
-                                 hex(fc + 128), 0x01)
+            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
+                                 (fc + 128), 0x01,0x00,0x00,0x00,0x00)
             return packet
 
     def except_illegal_data_address(self, pack):
@@ -161,16 +162,16 @@ class Modbus_S(QDialog):
             if (1 <= start <= 10000) and (1 <= (start + number - 1) <= 10000):
                 return None
             else:
-                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
-                                     hex(fc + 128), 0x02)
+                packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
+                                     (fc + 128), 0x02,0x00,0x00,0x00,0x00)
                 return packet
         if fc in [5, 6]:
             start = pack[8] * 256 + pack[9]
             if 1 <= start < 10000:
                 return None
             else:
-                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
-                                     hex(fc + 128), 0x02)
+                packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
+                                     (fc + 128), 0x02,0x00,0x00,0x00,0x00)
                 return packet
 
     def except_illegal_data_value(self, pack):
@@ -180,7 +181,7 @@ class Modbus_S(QDialog):
             if 1 <= number <= 255:
                 return None
             else:
-                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
                                      hex(fc + 128), 0x03)
                 return packet
 
@@ -218,6 +219,7 @@ class Modbus_S(QDialog):
         err6 = self.except_slave_device_busy(pack)
         if err6 is not None:
             return err6
+        return None
 
     def run(self):
         self.tcp_socket.bind((self.tcp_ip, self.tcp_port))
@@ -231,41 +233,40 @@ class Modbus_S(QDialog):
                 self.update_info()
                 initial_data = self.conn.recv(1024)
                 unpacked_data = struct.unpack('12B', initial_data)
-                # exception = self.pack_verify(unpacked_data)
-                # if exception is None:
-                function_code = unpacked_data[7]
-                if function_code == 3:
-                    # reading holding registers, need to echo back
-                    starting_register = unpacked_data[8] * 256 + unpacked_data[9]
-                    no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
-                    # currently hard-coded 13 bytes packets, might require refactoring
-                    packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
-                                         unpacked_data[3],
-                                         unpacked_data[4], unpacked_data[5], unpacked_data[6], function_code,
-                                         int(no_of_registers * 2), 0x00,
-                                         int(self.holding_registers[starting_register]), 0x00,
-                                         int(self.holding_registers[starting_register + no_of_registers - 1]))
+                exception = self.pack_verify(unpacked_data)
+                if exception is None:
+                    function_code = unpacked_data[7]
+                    if function_code == 3:
+                        # reading holding registers, need to echo back
+                        starting_register = unpacked_data[8] * 256 + unpacked_data[9]
+                        no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
+                        # currently hard-coded 13 bytes packets, might require refactoring
+                        packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
+                                             unpacked_data[3],
+                                             unpacked_data[4], unpacked_data[5], unpacked_data[6], function_code,
+                                             int(no_of_registers * 2), 0x00,
+                                             int(self.holding_registers[starting_register]), 0x00,
+                                             int(self.holding_registers[starting_register + no_of_registers - 1]))
 
-                    self.conn.sendall(packet)
-                elif function_code == 4:
-                    # reading input registers, need to echo back
-                    starting_register = unpacked_data[8] * 256 + unpacked_data[9]
-                    no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
+                        self.conn.sendall(packet)
+                    elif function_code == 4:
+                        # reading input registers, need to echo back
+                        starting_register = unpacked_data[8] * 256 + unpacked_data[9]
+                        no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
 
-                    packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
-                                         unpacked_data[3],
-                                         unpacked_data[4], unpacked_data[5], unpacked_data[6], function_code,
-                                         int(no_of_registers * 2), 0x00,
-                                         int(self.input_registers[starting_register]), 0x00,
-                                         int(self.input_registers[starting_register + no_of_registers - 1]))
+                        packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
+                                             unpacked_data[3],
+                                             unpacked_data[4], unpacked_data[5], unpacked_data[6], function_code,
+                                             int(no_of_registers * 2), 0x00,
+                                             int(self.input_registers[starting_register]), 0x00,
+                                             int(self.input_registers[starting_register + no_of_registers - 1]))
 
-                    self.conn.sendall(packet)
-                elif function_code == 5:
-                    self.conn.sendall(unpacked_data)
-                # TODO
-                # complete for the other function codes, currently unnecessary
-                # else:
-                #  self.conn.sendall(exception)
+                        self.conn.sendall(packet)
+                    elif function_code == 5:
+                        self.conn.sendall(unpacked_data)
+
+                else:
+                  self.conn.sendall(exception)
 
 
 if __name__ == '__main__':
