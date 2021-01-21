@@ -45,7 +45,6 @@ class Modbus_S(QDialog):
         self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
         self.awaiting_pin = True
         self.established_connection = False
-        logging.basicConfig(filename="log_" + str(date.today()) + ".log", level=logging.INFO)
         self.ui.save_btn.clicked.connect(self.log_list)
         x = threading.Thread(target=self.run)
         x.start()
@@ -87,6 +86,7 @@ class Modbus_S(QDialog):
 
     def log_list(self):
         try:
+            logging.basicConfig(filename="log_" + str(date.today()) + ".log", level=logging.INFO)
             for msg in self.msglist:
                 logging.info(msg)
             self.ui.statusbar.showMessage("Data saved in Log file.")
