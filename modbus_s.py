@@ -3,6 +3,7 @@ import socket
 import threading
 import psutil
 import math
+
 import logging
 from datetime import date
 from datetime import datetime
@@ -43,9 +44,7 @@ class Modbus_S(QDialog):
         self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
         self.awaiting_pin = True
         self.established_connection = False
-
         logging.basicConfig(filename="log_" + str(date.today()) + ".log", level=logging.INFO)
-
         self.ui.save_btn.clicked.connect(self.log_list)
         x = threading.Thread(target=self.run)
         x.start()
@@ -56,9 +55,9 @@ class Modbus_S(QDialog):
         # first coil(pin) to check is 7
         current_pin = 7
         while self.awaiting_pin:
-            # print("Am here")
             initial_data = conn.recv(1024)
             unpacked_data = struct.unpack('12B', initial_data)
+            self.write_status("Received: " + str(unpacked_data))
             coil_addr = unpacked_data[8] * 256 + unpacked_data[9]
             function_code = unpacked_data[7]
             if unpacked_data[10] == 255:
@@ -73,24 +72,29 @@ class Modbus_S(QDialog):
             if self.coils[7] and self.coils[77] and self.coils[777] and self.coils[7777]:
                 self.awaiting_pin = False
                 self.established_connection = True
-                self.afterconn()
+                self.connui()
 
     def write_status(self, message):
         self.msglist.append(message)
+        self.ui.statusbar.showMessage(self.msglist[-1])
 
-    def afterconn(self):
+    def connui(self):
         if self.established_connection:
             self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
                               ")Connection established: " + str(self.established_connection))
-            self.ui.statusbar.showMessage(self.msglist[-1])
             self.ui.led.value = True
 
     def log_list(self):
-        for msg in self.msglist:
-            logging.info(msg)
+        try:
+            for msg in self.msglist:
+                logging.info(msg)
+            self.ui.statusbar.showMessage("Data saved in Log file.")
+        except Exception as e:
+            self.ui.statusbar.showMessage("Eroare la scrierea in fisier: ", e)
 
     def set_tables(self):
         idx = ind = 0
+        self.ui.tcoils.clear()
         self.ui.tcoils.setRowCount(30)
         for row in self.coils:
             if row == 0:
@@ -101,6 +105,7 @@ class Modbus_S(QDialog):
                 idx += 1
                 ind += 1
         idx = ind = 0
+        self.ui.tdinp.clear()
         self.ui.tdinp.setRowCount(30)
         for row in self.discrete_inputs:
             if row == 0:
@@ -112,6 +117,7 @@ class Modbus_S(QDialog):
                 ind += 1
 
         idx = ind = 0
+        self.ui.tinreg_2.clear()
         self.ui.tinreg_2.setRowCount(30)
         for row in self.input_registers:
             if row == 0:
@@ -122,6 +128,7 @@ class Modbus_S(QDialog):
                 idx += 1
                 ind += 1
         idx = ind = 0
+        self.ui.tholreg.clear()
         self.ui.tholreg.setRowCount(30)
         for row in self.holding_registers:
             if row == 0:
@@ -200,7 +207,7 @@ class Modbus_S(QDialog):
         if not self.slave_failure:
             return None
         else:
-            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
                                  (fc + 128), 0x04, 0x00, 0x00, 0x00, 0x00)
             return packet
 
@@ -209,7 +216,7 @@ class Modbus_S(QDialog):
         if not self.slave_busy:
             return None
         else:
-            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
                                  (fc + 128), 0x06, 0x00, 0x00, 0x00, 0x00)
             return packet
 
@@ -238,56 +245,76 @@ class Modbus_S(QDialog):
         with self.conn:
             self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
                               ")Connected by" + str(self.addr))
-            self.ui.statusbar.showMessage(self.msglist[-1])
             self.initialize_connection(self.conn)
-            while True:
+            ok = 1
+            while ok:
                 self.update_info()
                 initial_data = self.conn.recv(1024)
-                unpacked_data = struct.unpack('12B', initial_data)
-                exception = self.pack_verify(unpacked_data)
-                self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                  ")Received " + str(unpacked_data))
-                if exception is None:
-                    function_code = unpacked_data[7]
-                    if function_code == 3:
-                        # reading holding registers, need to echo back
-                        starting_register = unpacked_data[8] * 256 + unpacked_data[9]
-                        no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
-                        # currently hard-coded 13 bytes packets, might require refactoring
-                        packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
-                                             unpacked_data[3],
-                                             unpacked_data[4], unpacked_data[5], unpacked_data[6], function_code,
-                                             int(no_of_registers * 2), 0x00,
-                                             int(self.holding_registers[starting_register]), 0x00,
-                                             int(self.holding_registers[starting_register + no_of_registers - 1]))
+                if initial_data:
+                    unpacked_data = struct.unpack('12B', initial_data)
+                    self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                      ")Received " + str(unpacked_data))
+                    exception = self.pack_verify(unpacked_data)
+                    if exception is None:
+                        function_code = unpacked_data[7]
+                        if function_code == 1:
+                            starting_addr = unpacked_data[8] * 256 + unpacked_data[9]
+                            no_of_coils = unpacked_data[10] * 256 + unpacked_data[11]
+                            packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
+                                                 unpacked_data[3],
+                                                 unpacked_data[4], 0x07, unpacked_data[6], function_code,
+                                                 int(no_of_registers * 2), 0x00,
+                                                 int(self.holding_registers[starting_addr]), 0x00,
+                                                 int(self.holding_registers[starting_addr + no_of_coils - 1]))
 
-                        self.conn.sendall(packet)
-                        self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                          ")Sent " + str(struct.unpack('13B', packet)))
-                    elif function_code == 4:
-                        # reading input registers, need to echo back
-                        starting_register = unpacked_data[8] * 256 + unpacked_data[9]
-                        no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
+                            self.conn.sendall(packet)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(struct.unpack('13B', packet)))
 
-                        packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
-                                             unpacked_data[3],
-                                             unpacked_data[4], unpacked_data[5], unpacked_data[6], function_code,
-                                             int(no_of_registers * 2), 0x00,
-                                             int(self.input_registers[starting_register]), 0x00,
-                                             int(self.input_registers[starting_register + no_of_registers - 1]))
+                        elif function_code == 3:
+                            # reading holding registers, need to echo back
+                            starting_register = unpacked_data[8] * 256 + unpacked_data[9]
+                            no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
+                            # currently hard-coded 13 bytes packets, might require refactoring
+                            packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
+                                                 unpacked_data[3],
+                                                 unpacked_data[4], 0x07, unpacked_data[6], function_code,
+                                                 int(no_of_registers * 2), 0x00,
+                                                 int(self.holding_registers[starting_register]), 0x00,
+                                                 int(self.holding_registers[starting_register + no_of_registers - 1]))
 
-                        self.conn.sendall(packet)
+                            self.conn.sendall(packet)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(struct.unpack('13B', packet)))
+                        elif function_code == 4:
+                            # reading input registers, need to echo back
+                            starting_register = unpacked_data[8] * 256 + unpacked_data[9]
+                            no_of_registers = unpacked_data[10] * 256 + unpacked_data[11]
+
+                            packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
+                                                 unpacked_data[3],
+                                                 unpacked_data[4], 0x07, unpacked_data[6], function_code,
+                                                 int(no_of_registers * 2), 0x00,
+                                                 int(self.input_registers[starting_register]), 0x00,
+                                                 int(self.input_registers[starting_register + no_of_registers - 1]))
+
+                            self.conn.sendall(packet)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(struct.unpack('13B', packet)))
+                        elif function_code == 5:
+                            self.conn.sendall(initial_data)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(struct.unpack('13B', packet)))
+
+                    else:
+                        self.conn.sendall(exception)
                         self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                          ")Sent " + str(struct.unpack('13B', packet)))
-                    elif function_code == 5:
-                        self.conn.sendall(initial_data)
-                        self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                          ")Sent " + str(struct.unpack('13B', packet)))
+                                          ")Exception " + str(struct.unpack('13B', exception)))
 
                 else:
-                    self.conn.sendall(exception)
-                    self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                      ")Exception " + str(struct.unpack('13B', packet)))
+                    self.write_status("connection lost")
+                    self.ui.led.value = False
+                    ok = 0
 
 
 if __name__ == '__main__':
