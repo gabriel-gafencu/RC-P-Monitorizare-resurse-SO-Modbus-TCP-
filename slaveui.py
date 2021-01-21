@@ -141,8 +141,9 @@ class Ui_Slave(object):
         x = msg.exec_()
 
 
+
 # pentru verificare
-class MainSlave(QDialog):
+'''class MainSlave(QDialog):
     def __init__(self):
         super(MainSlave, self).__init__()
         ui = Ui_Slave()
@@ -156,3 +157,4 @@ if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     ms = MainSlave()
     sys.exit(app.exec_())
+'''
