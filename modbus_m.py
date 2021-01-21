@@ -34,6 +34,8 @@ class Modbus_M(QDialog):
     write_multiple_coils_function_code = 15
     write_multiple_registers_function_code = 16
     msglist = []
+    exceptions = {1: "Illegal Function", 2: "Illegal Data Address", 3: "Illegal Data Value", 4: "Slave Failure",
+                  6: "Slave Busy"}
     curr_err = 0
 
     def __init__(self, id=DEFAULT_ID, ip=DEFAULT_IP, port=DEFAULT_PORT):
@@ -80,19 +82,25 @@ class Modbus_M(QDialog):
         if sent_packet != returned_packet:
             print(sent_packet, " != ", returned_packet)
         self.established_connection = True
-        self.conn()
+        self.connui()
 
-    def conn(self):
+    def write_status(self, message):
+        self.msglist.append(message)
+        self.ui.status.showMessage(self.msglist[-1])
+
+    def connui(self):
         if self.established_connection:
             self.write_status("Connection established: " + str(self.established_connection))
-            self.ui.status.showMessage(self.msglist[-1])
             self.ui.led.value = True
             self.ui.login.setDisabled(True)
+            self.ui.disable_buttons(False)
 
     def draw_cpu(self):
+
         reqcpu = self.request_cpu()
         if reqcpu == -1:
-            self.ui.status.showMessage("eroare function ")
+            self.write_status(self.exceptions[self.curr_err])
+
         else:
             self.ui.status.showMessage("cpu " + str(reqcpu) + "%")
 
@@ -107,32 +115,37 @@ class Modbus_M(QDialog):
 
     def draw_disk(self):
         req = self.request_disk()
-        self.ui.status.showMessage("disk " + str(req) + "%")
+        if req == -1:
+            self.write_status(self.exceptions[self.curr_err])
 
-        series = QPieSeries()
-        series.append("Ocupat ", req)
-        series.append("Liber", 100 - req)
-        chart = QChart()
-        chart.addSeries(series)
-        chart.setTitle("Disk usage")
-        self.ui.graphicsView.setChart(chart)
-        self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
+        else:
+            self.ui.status.showMessage("disk " + str(req) + "%")
+
+            series = QPieSeries()
+            series.append("Ocupat ", req)
+            series.append("Liber", 100 - req)
+            chart = QChart()
+            chart.addSeries(series)
+            chart.setTitle("Disk usage")
+            self.ui.graphicsView.setChart(chart)
+            self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
 
     def draw_memory(self):
         req = self.request_memory()
-        self.ui.status.showMessage("memory " + str(req) + "%")
+        if req == -1:
+            self.write_status(self.exceptions[self.curr_err])
 
-        series = QPieSeries()
-        series.append("Ocupat ", req)
-        series.append("Liber", 100 - req)
-        chart = QChart()
-        chart.addSeries(series)
-        chart.setTitle("Memory usage")
-        self.ui.graphicsView.setChart(chart)
-        self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
+        else:
+            self.ui.status.showMessage("memory " + str(req) + "%")
 
-    def write_status(self, message):
-        self.msglist.append(message)
+            series = QPieSeries()
+            series.append("Ocupat ", req)
+            series.append("Liber", 100 - req)
+            chart = QChart()
+            chart.addSeries(series)
+            chart.setTitle("Memory usage")
+            self.ui.graphicsView.setChart(chart)
+            self.ui.graphicsView.setRenderHint(QtGui.QPainter.Antialiasing)
 
     # cereri
     def read_coils(self, addr_h, addr_l, no_of_coils_h, no_of_coils_l):
@@ -188,7 +201,6 @@ class Modbus_M(QDialog):
         self.tcp_socket.sendall(packet)
 
     def write_multiple_coils(self, addr_h, addr_l, no_of_coils_h, no_of_coils_l, byte_count, force_data_h):
-        # TODO
         # needs to be refactored
         # function code 15
         # write multiple coils has a different length compared to the previous operations,
@@ -200,7 +212,6 @@ class Modbus_M(QDialog):
         self.tcp_socket.sendall(packet)
 
     def write_multiple_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l, byte_count, force_data_h):
-        # TODO
         # function code 16
         packet = struct.pack('14B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
                              self.protocol_id_l, 0x00, 0x08, self.unit_id,
@@ -213,8 +224,10 @@ class Modbus_M(QDialog):
         # self.tcp_socket.connect((self.tcp_ip, self.tcp_port))
         self.read_input_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
+        # no_bytes = len(initial_data)
         unpacked_data = struct.unpack('13B', initial_data)
         if unpacked_data[7] > 128:
+            self.curr_err = unpacked_data[8]
             return -1
         else:
             cpu_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
@@ -225,19 +238,29 @@ class Modbus_M(QDialog):
         # memory is mapped to holding registers 1 and 2 (whole and fractionary)
         self.read_holding_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
+        no_bytes = len(initial_data)
         unpacked_data = struct.unpack('13B', initial_data)
-        memory_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
-        memory_percentage_frac = unpacked_data[11] * 256 + unpacked_data[12]
-        return memory_percentage_whole + (memory_percentage_frac / 100)
+        if unpacked_data[7] > 128:
+            self.curr_err = unpacked_data[8]
+            return -1
+        else:
+            memory_percentage_whole = unpacked_data[9] * 256 + unpacked_data[10]
+            memory_percentage_frac = unpacked_data[11] * 256 + unpacked_data[12]
+            return memory_percentage_whole + (memory_percentage_frac / 100)
 
     def request_disk(self):
         # disk percent occupied is mapped to holding registers 11 and 12 (whole and fractionary)
-        self.read_holding_registers(0x00, 0x0B, 0x00, 0x0C)
+        self.read_holding_registers(0x00, 0x0B, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
+        no_bytes = len(initial_data)
         unpacked_data = struct.unpack('13B', initial_data)
-        disk_usage_whole = unpacked_data[9] * 256 + unpacked_data[10]
-        disk_usage_frac = unpacked_data[11] * 256 + unpacked_data[12]
-        return disk_usage_whole + (disk_usage_frac / 100)
+        if unpacked_data[7] > 128:
+            self.curr_err = unpacked_data[8]
+            return -1
+        else:
+            disk_usage_whole = unpacked_data[9] * 256 + unpacked_data[10]
+            disk_usage_fr = unpacked_data[11] * 256 + unpacked_data[12]
+            return disk_usage_whole + (disk_usage_fr / 100)
 
 
 if __name__ == '__main__':

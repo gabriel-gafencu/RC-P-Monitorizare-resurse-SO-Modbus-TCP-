@@ -57,6 +57,7 @@ class Ui_Master(object):
 
         self.retranslateUi(Master)
         QtCore.QMetaObject.connectSlotsByName(Master)
+        self.disable_buttons(True)
 
     def retranslateUi(self, Master):
         _translate = QtCore.QCoreApplication.translate
@@ -67,6 +68,11 @@ class Ui_Master(object):
         self.disk_btn.setText(_translate("Master", "Disk usage"))
         self.login.setText(_translate("Master", "Login"))
         self.label_s.setText(_translate("Master", "Status:"))
+
+    def disable_buttons(self,state):
+        self.cpu_btn.setDisabled(state)
+        self.disk_btn.setDisabled(state)
+        self.memory_btn.setDisabled(state)
 
 # doar pentru verificarea interfetei
 '''class  MainMaster(QDialog):
