@@ -1,0 +1,8 @@
+INFO:root:(20:35:20)Connected by('127.0.0.1', 55966)
+INFO:root:(20:35:20)Connection established: True
+INFO:root:(20:35:22)Received (0, 0, 0, 0, 0, 6, 0, 3, 0, 1, 0, 2)
+INFO:root:(20:35:22)Sent (0, 0, 0, 0, 0, 6, 0, 3, 4, 0, 79, 0, 90)
+INFO:root:(20:35:23)Received (0, 0, 0, 0, 0, 6, 0, 3, 0, 11, 0, 12)
+INFO:root:(20:35:23)Sent (0, 0, 0, 0, 0, 6, 0, 3, 24, 0, 89, 0, 0)
+INFO:root:(20:35:25)Received (0, 0, 0, 0, 0, 6, 0, 3, 0, 1, 0, 2)
+INFO:root:(20:35:25)Sent (0, 0, 0, 0, 0, 6, 0, 3, 4, 0, 79, 0, 79)
