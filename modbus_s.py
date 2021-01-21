@@ -10,6 +10,7 @@ from datetime import datetime
 
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import *
+from numpy import byte
 
 from slaveui import Ui_Slave
 
@@ -167,8 +168,8 @@ class Modbus_S(QDialog):
         if fc in [1, 2, 3, 4, 5, 6, 15, 16]:
             return None
         else:
-            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                 (fc + 128), 0x01, 0x00, 0x00, 0x00, 0x00)
+            packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                 (fc + 128), 0x01)
             return packet
 
     def except_illegal_data_address(self, pack):
@@ -179,16 +180,16 @@ class Modbus_S(QDialog):
             if (1 <= start <= 10000) and (1 <= (start + number - 1) <= 10000):
                 return None
             else:
-                packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                     (fc + 128), 0x02, 0x00, 0x00, 0x00, 0x00)
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                     (fc + 128), 0x02)
                 return packet
         if fc in [5, 6]:
             start = pack[8] * 256 + pack[9]
             if 1 <= start < 10000:
                 return None
             else:
-                packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                     (fc + 128), 0x02, 0x00, 0x00, 0x00, 0x00)
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                     (fc + 128), 0x02)
                 return packet
 
     def except_illegal_data_value(self, pack):
@@ -198,8 +199,8 @@ class Modbus_S(QDialog):
             if 1 <= number <= 255:
                 return None
             else:
-                packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                     (fc + 128), 0x03, 0x00, 0x00, 0x00, 0x00)
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                     (fc + 128), 0x03)
                 return packet
 
     def except_slave_device_failure(self, pack):
@@ -207,8 +208,8 @@ class Modbus_S(QDialog):
         if not self.slave_failure:
             return None
         else:
-            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                 (fc + 128), 0x04, 0x00, 0x00, 0x00, 0x00)
+            packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                 (fc + 128), 0x04)
             return packet
 
     def except_slave_device_busy(self, pack):
@@ -216,8 +217,8 @@ class Modbus_S(QDialog):
         if not self.slave_busy:
             return None
         else:
-            packet = struct.pack('13B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x07, pack[6],
-                                 (fc + 128), 0x06, 0x00, 0x00, 0x00, 0x00)
+            packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                 (fc + 128), 0x06)
             return packet
 
     def pack_verify(self, pack):
@@ -250,26 +251,50 @@ class Modbus_S(QDialog):
             while ok:
                 self.update_info()
                 initial_data = self.conn.recv(1024)
+                no = len(initial_data)
                 if initial_data:
-                    unpacked_data = struct.unpack('12B', initial_data)
+                    unpacked_data = struct.unpack(str(no) + 'B', initial_data)
                     self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
                                       ")Received " + str(unpacked_data))
                     exception = self.pack_verify(unpacked_data)
                     if exception is None:
                         function_code = unpacked_data[7]
                         if function_code == 1:
+                            # read coils
                             starting_addr = unpacked_data[8] * 256 + unpacked_data[9]
-                            no_of_coils = unpacked_data[10] * 256 + unpacked_data[11]
-                            packet = struct.pack('13B', unpacked_data[0], unpacked_data[1], unpacked_data[2],
-                                                 unpacked_data[3],
-                                                 unpacked_data[4], 0x07, unpacked_data[6], function_code,
-                                                 int(no_of_registers * 2), 0x00,
-                                                 int(self.holding_registers[starting_addr]), 0x00,
-                                                 int(self.holding_registers[starting_addr + no_of_coils - 1]))
+                            no_of_dinp = unpacked_data[10] * 256 + unpacked_data[11]
+                            pack_list = [unpacked_data[0], unpacked_data[1],
+                                         unpacked_data[2], unpacked_data[3],
+                                         unpacked_data[4], (no_of_dinp + 3), unpacked_data[6], function_code,
+                                         int(no_of_dinp)]
+                            for i in range(0, no_of_dinp):
+                                if self.coils[starting_addr + i] == 0:
+                                    pack_list.append(0x00)
+                                else:
+                                    pack_list.append(255)
+                            packet = bytes(pack_list)
 
                             self.conn.sendall(packet)
                             self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                              ")Sent " + str(struct.unpack('13B', packet)))
+                                              ")Sent " + str(struct.unpack(str(9 + no_of_dinp) + 'B', packet)))
+
+                        elif function_code == 2:
+                            # read discrete inputs
+                            starting_addr = unpacked_data[8] * 256 + unpacked_data[9]
+                            no_of_dinp = unpacked_data[10] * 256 + unpacked_data[11]
+                            pack_list = [unpacked_data[0], unpacked_data[1],
+                                         unpacked_data[2], unpacked_data[3],
+                                         unpacked_data[4], (no_of_dinp + 3), unpacked_data[6], function_code,
+                                         int(no_of_dinp)]
+                            for i in range(0, no_of_dinp):
+                                if self.coils[starting_addr + i] == 0:
+                                    pack_list.append(0x00)
+                                else:
+                                    pack_list.append(0xFF)
+                            packet = bytes(pack_list)
+                            self.conn.sendall(packet)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(struct.unpack(str(9 + no_of_dinp) + 'B', packet)))
 
                         elif function_code == 3:
                             # reading holding registers, need to echo back
@@ -302,19 +327,55 @@ class Modbus_S(QDialog):
                             self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
                                               ")Sent " + str(struct.unpack('13B', packet)))
                         elif function_code == 5:
+                            # write single coil
+                            coil_addr = unpacked_data[8] * 256 + unpacked_data[9]
+                            val = unpacked_data[10]
+                            if val == 0:
+                                self.coils[coil_addr] = 0
+                            else:
+                                self.coils[coil_addr] = 1
                             self.conn.sendall(initial_data)
                             self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                              ")Sent " + str(struct.unpack('13B', packet)))
+                                              ")Sent " + str(unpacked_data))
+                        elif function_code == 6:
+                            # write holding register
+                            coils_addr = unpacked_data[8] * 256 + unpacked_data[9]
+                            val = unpacked_data[10] * 256 + unpacked_data[11]
+                            self.holding_registers[coils_addr] = val
+                            self.conn.sendall(initial_data)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(unpacked_data))
+                        elif function_code == 15:
+                            # write multiple coils
+                            coils_addr = unpacked_data[8] * 256 + unpacked_data[9]
+                            no_coils = unpacked_data[10] * 256 + unpacked_data[11]
+                            no_octeti = unpacked_data[12]
+                            val = unpacked_data[13]
+                            val_biti = bitfield(val)
+                            val_biti.reverse()
+                            ind = 0
+                            for i in val_biti:
+                                self.coils[coils_addr + ind] = i
+                                ind += 1
+                            for i in range(no_coils, no_octeti * 8):
+                                self.coils[coils_addr + i] = 0
+                            self.conn.sendall(initial_data)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(unpacked_data))
 
                     else:
                         self.conn.sendall(exception)
                         self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
-                                          ")Exception " + str(struct.unpack('13B', exception)))
+                                          ")Exception " + str(struct.unpack('9B', exception)))
 
                 else:
                     self.write_status("connection lost")
                     self.ui.led.value = False
                     ok = 0
+
+
+def bitfield(n):
+    return [int(digit) for digit in bin(n)[2:]]
 
 
 if __name__ == '__main__':
