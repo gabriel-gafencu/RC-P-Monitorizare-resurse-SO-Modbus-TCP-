@@ -210,7 +210,7 @@ class Modbus_S(QDialog):
         if fc == 15:
             no_coils = pack[10] * 256 + pack[11]
             no_octeti = pack[12]
-            val = pack[13]
+            val = int(pack[13])
             if (no_coils <= no_octeti * 8) and (len(bitfield(val)) <= no_coils):
                 return None
             else:
