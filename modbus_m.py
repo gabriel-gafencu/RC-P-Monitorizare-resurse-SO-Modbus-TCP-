@@ -52,7 +52,7 @@ class Modbus_M(QDialog):
         # self.tcp_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 3000))
         self.ui.login.clicked.connect(self.initialize_connection)
 
-        self.ui.cpu_btn.clicked.connect(self.draw_cpu)
+        self.ui.cpu_btn.clicked.connect(self.com_testwmc)
 
         self.ui.disk_btn.clicked.connect(self.draw_disk)
         self.ui.memory_btn.clicked.connect(self.draw_memory)
@@ -211,12 +211,12 @@ class Modbus_M(QDialog):
                              byte_count, force_data_h)
         self.tcp_socket.sendall(packet)
 
-    def write_multiple_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l, byte_count, force_data_h):
-        # function code 16
-        packet = struct.pack('14B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
-                             self.protocol_id_l, 0x00, 0x08, self.unit_id,
+    def write_multiple_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l, data_h, data_l, data_h2, data_l2):
+        # function code 16 (exemplu scriere de 2 registri)
+        packet = struct.pack('16B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
+                             self.protocol_id_l, 0x00, 0x0A, self.unit_id,
                              int(self.write_multiple_registers_function_code), addr_h, addr_l, no_of_reg_h, no_of_reg_l,
-                             byte_count, force_data_h)
+                             data_h, data_l, data_h2, data_l2)
         self.tcp_socket.sendall(packet)
 
     def request_cpu(self):
@@ -224,8 +224,8 @@ class Modbus_M(QDialog):
         # self.tcp_socket.connect((self.tcp_ip, self.tcp_port))
         self.read_input_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
-        # no_bytes = len(initial_data)
-        unpacked_data = struct.unpack('13B', initial_data)
+        no_bytes = len(initial_data)
+        unpacked_data = struct.unpack(str(no_bytes) + 'B', initial_data)
         if unpacked_data[7] > 128:
             self.curr_err = unpacked_data[8]
             return -1
@@ -239,7 +239,7 @@ class Modbus_M(QDialog):
         self.read_holding_registers(0x00, 0x01, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
         no_bytes = len(initial_data)
-        unpacked_data = struct.unpack('13B', initial_data)
+        unpacked_data = struct.unpack(str(no_bytes) + 'B', initial_data)
         if unpacked_data[7] > 128:
             self.curr_err = unpacked_data[8]
             return -1
@@ -253,7 +253,7 @@ class Modbus_M(QDialog):
         self.read_holding_registers(0x00, 0x0B, 0x00, 0x02)
         initial_data = self.tcp_socket.recv(1024)
         no_bytes = len(initial_data)
-        unpacked_data = struct.unpack('13B', initial_data)
+        unpacked_data = struct.unpack(str(no_bytes) + 'B', initial_data)
         if unpacked_data[7] > 128:
             self.curr_err = unpacked_data[8]
             return -1
@@ -261,6 +261,47 @@ class Modbus_M(QDialog):
             disk_usage_whole = unpacked_data[9] * 256 + unpacked_data[10]
             disk_usage_fr = unpacked_data[11] * 256 + unpacked_data[12]
             return disk_usage_whole + (disk_usage_fr / 100)
+
+    # doar pentru testare
+    def test_readcoils(self):
+        self.read_coils(0x00, 0x06, 0x00, 0x04)
+        initial_data = self.tcp_socket.recv(1024)
+        no_bytes = len(initial_data)
+        unpacked_data = struct.unpack(str(no_bytes) + 'B', initial_data)
+        if unpacked_data[7] > 128:
+            self.curr_err = unpacked_data[8]
+            return -1
+        else:
+
+            return str(unpacked_data[9:13])
+
+    def com_testrc(self):
+        req = self.test_readcoils()
+        if req == -1:
+            self.write_status(self.exceptions[self.curr_err])
+
+        else:
+            self.ui.status.showMessage("Coils read: " + str(req))
+
+    def test_writemultiplecoils(self):
+        self.write_multiple_coils(0x00, 0x64, 0x00, 0x04, 0x01, 0x0B)
+        initial_data = self.tcp_socket.recv(1024)
+        no_bytes = len(initial_data)
+        unpacked_data = struct.unpack(str(no_bytes) + 'B', initial_data)
+        if unpacked_data[7] > 128:
+            self.curr_err = unpacked_data[8]
+            return -1
+        else:
+
+            return str(unpacked_data)
+
+    def com_testwmc(self):
+        req = self.test_writemultiplecoils()
+        if req == -1:
+            self.write_status(self.exceptions[self.curr_err])
+
+        else:
+            self.ui.status.showMessage("Coils written: " + str(req))
 
 
 if __name__ == '__main__':
