@@ -211,12 +211,12 @@ class Modbus_M(QDialog):
                              byte_count, force_data_h)
         self.tcp_socket.sendall(packet)
 
-    def write_multiple_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l, byte_count, force_data_h):
-        # function code 16
-        packet = struct.pack('14B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
-                             self.protocol_id_l, 0x00, 0x08, self.unit_id,
+    def write_multiple_registers(self, addr_h, addr_l, no_of_reg_h, no_of_reg_l, data_h, data_l, data_h2, data_l2):
+        # function code 16 (exemplu scriere de 2 registri)
+        packet = struct.pack('16B', self.transaction_id_h, self.transaction_id_l, self.protocol_id_h,
+                             self.protocol_id_l, 0x00, 0x0A, self.unit_id,
                              int(self.write_multiple_registers_function_code), addr_h, addr_l, no_of_reg_h, no_of_reg_l,
-                             byte_count, force_data_h)
+                             data_h, data_l, data_h2, data_l2)
         self.tcp_socket.sendall(packet)
 
     def request_cpu(self):

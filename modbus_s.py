@@ -140,10 +140,7 @@ class Modbus_S(QDialog):
                 idx += 1
                 ind += 1
 
-    # this function is started by a different thread once a connection has been established
-    # it simply updates the OS resources mapped to all the different data structures of the Modbus Server
-    # every 0.5 seconds
-
+    # this function simply updates the OS resources mapped to all the different data structures of the Slave
     def update_info(self):
         # mapping the whole and the fractionary part of the cpu percent to the 1st and 2nd input registers
         frac, whole = math.modf(psutil.cpu_percent(interval=0.1))
@@ -197,6 +194,33 @@ class Modbus_S(QDialog):
         if fc in [1, 2, 3, 4]:
             number = pack[10] * 256 + pack[11]
             if 1 <= number <= 255:
+                return None
+            else:
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                     (fc + 128), 0x03)
+                return packet
+        if fc == 5:
+            value = pack[10]
+            if value == 255 or value == 0:
+                return None
+            else:
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                     (fc + 128), 0x03)
+                return packet
+        if fc == 15:
+            no_coils = pack[10] * 256 + pack[11]
+            no_octeti = pack[12]
+            val = pack[13]
+            if (no_coils <= no_octeti * 8) and (len(bitfield(val) <= no_coils)):
+                return None
+            else:
+                packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
+                                     (fc + 128), 0x03)
+                return packet
+        if fc == 16:
+            reg_addr = pack[8] * 256 + pack[9]
+            no_reg = pack[10] * 256 + pack[11]
+            if no_reg * 2 + 4 + 8 == len(pack):
                 return None
             else:
                 packet = struct.pack('9B', pack[0], pack[1], pack[2], pack[3], pack[4], 0x03, pack[6],
@@ -359,6 +383,21 @@ class Modbus_S(QDialog):
                                 ind += 1
                             for i in range(no_coils, no_octeti * 8):
                                 self.coils[coils_addr + i] = 0
+                            self.conn.sendall(initial_data)
+                            self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
+                                              ")Sent " + str(unpacked_data))
+                        elif function_code == 16:
+                            # write multiple registers
+                            reg_addr = unpacked_data[8] * 256 + unpacked_data[9]
+                            no_reg = unpacked_data[10] * 256 + unpacked_data[11]
+                            values = []
+                            for i in range(12, no_reg * 2, 2):
+                                values.append(unpacked_data[i] * 256 + unpacked_data[i + 1])
+                            ind = 0
+                            for i in values:
+                                self.holding_registers[reg_addr + ind] = i
+                                ind += 1
+
                             self.conn.sendall(initial_data)
                             self.write_status("(" + str(datetime.now().strftime("%H:%M:%S")) +
                                               ")Sent " + str(unpacked_data))
